@@ -81,3 +81,6 @@ cd frontend
 npm install
 npm run dev
 ```
+![Screenshot 2026-02-01 at 14 25 06](https://github.com/user-attachments/assets/f218458a-ef51-42c3-ab37-5287fe2a9fe2)
+![Screenshot 2026-02-01 at 14 24 53](https://github.com/user-attachments/assets/d4ef6e61-5965-47dd-8e49-98b9bdea841b)
+
