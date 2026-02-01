@@ -44,9 +44,40 @@ It calls Amadeus Self-Service APIs to fetch:
 
 ## Local Setup (Windows 11)
 
-### 1) Start MySQL (Docker)
+### One-command dev start
 From repo root:
 
 ```powershell
+.\scripts\dev.ps1
+```
+
+Stops everything:
+
+```powershell
+.\scripts\stop.ps1
+```
+
+### Manual setup (optional)
+
+1) Start MySQL (Docker):
+
+```powershell
 docker compose -f infra/docker-compose.yml up -d
-docker ps
+```
+
+2) Backend (venv + deps + migrations + API):
+
+```powershell
+python -m venv backend\.venv
+.\backend\.venv\Scripts\python -m pip install -r backend\requirements.txt
+.\backend\.venv\Scripts\python -m alembic -c backend\alembic.ini upgrade head
+.\backend\.venv\Scripts\python -m uvicorn app.main:app --reload --app-dir backend
+```
+
+3) Frontend (Vite dev server):
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```

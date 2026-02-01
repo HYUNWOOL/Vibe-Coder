@@ -9,6 +9,7 @@ from typing import Any
 from app.core.config import settings
 from app.integrations.amadeus_flights import get_flights_client
 from app.integrations.amadeus_hotels import HotelOfferSummary, get_hotels_client
+from app.integrations.fx_rates import FxRatesClient, get_fx_client
 from app.schemas.search import SearchRequestIn
 
 
@@ -72,6 +73,7 @@ def get_city_candidates(continent: str) -> list[CityCandidate]:
 def build_recommendations(request: SearchRequestIn) -> list[dict[str, Any]]:
     flights_client = get_flights_client()
     hotels_client = get_hotels_client()
+    fx_client = get_fx_client()
     candidates = get_city_candidates(request.continent)
 
     recommendations: list[dict[str, Any]] = []
@@ -84,7 +86,14 @@ def build_recommendations(request: SearchRequestIn) -> list[dict[str, Any]]:
             date_to=request.date_to,
             adults=request.adults,
             max_stops=_pref_max_stops(request),
+            currency_code=request.currency,
         )
+        flight_offers = _convert_flight_offers(
+            flight_offers,
+            target_currency=request.currency,
+            fx_client=fx_client,
+        )
+
         hotel_offers = hotels_client.search_offers(
             city_code=city_code,
             check_in=_to_date(request.date_from),
@@ -92,6 +101,12 @@ def build_recommendations(request: SearchRequestIn) -> list[dict[str, Any]]:
             adults=request.adults,
             max_price=None,
             stars_min=_pref_hotel_stars(request),
+            currency_code=request.currency,
+        )
+        hotel_offers = _convert_hotel_offers(
+            hotel_offers,
+            target_currency=request.currency,
+            fx_client=fx_client,
         )
 
         flight_min_total, flight_currency = _min_flight_total(flight_offers)
@@ -138,6 +153,63 @@ def build_recommendations(request: SearchRequestIn) -> list[dict[str, Any]]:
 
 def _to_date(value: date) -> date:
     return value
+
+
+def _convert_flight_offers(
+    offers: list[dict[str, Any]],
+    *,
+    target_currency: str,
+    fx_client: FxRatesClient,
+) -> list[dict[str, Any]]:
+    converted: list[dict[str, Any]] = []
+    for offer in offers:
+        currency = offer.get("currency")
+        amount = _parse_money(offer.get("price_total"))
+        if not currency or amount is None:
+            continue
+        rate = fx_client.get_rate(currency, target_currency)
+        if rate is None:
+            continue
+        converted_offer = dict(offer)
+        converted_offer["currency"] = target_currency
+        converted_offer["price_total"] = round(amount * rate, 2)
+        converted.append(converted_offer)
+    return converted
+
+
+def _convert_hotel_offers(
+    offers: list[HotelOfferSummary],
+    *,
+    target_currency: str,
+    fx_client: FxRatesClient,
+) -> list[HotelOfferSummary]:
+    converted: list[HotelOfferSummary] = []
+    for offer in offers:
+        if not offer.currency or offer.price_total is None:
+            continue
+        rate = fx_client.get_rate(offer.currency, target_currency)
+        if rate is None:
+            continue
+        price_total = round(offer.price_total * rate, 2)
+        price_per_night = (
+            round(offer.price_per_night_estimate * rate, 2)
+            if offer.price_per_night_estimate is not None
+            else None
+        )
+        converted.append(
+            HotelOfferSummary(
+                id=offer.id,
+                name=offer.name,
+                city_code=offer.city_code,
+                currency=target_currency,
+                price_total=price_total,
+                price_per_night_estimate=price_per_night,
+                rating=offer.rating,
+                address=offer.address,
+                cancellation_policy=offer.cancellation_policy,
+            )
+        )
+    return converted
 
 
 def _pref_max_stops(request: SearchRequestIn) -> int | None:

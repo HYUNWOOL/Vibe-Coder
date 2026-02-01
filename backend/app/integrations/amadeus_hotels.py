@@ -89,6 +89,7 @@ class AmadeusHotelsClient:
         adults: int,
         max_price: float | None = None,
         stars_min: int | None = None,
+        currency_code: str | None = None,
     ) -> list[HotelOfferSummary]:
         hotels = self.list_hotels_by_city(
             city_code=city_code,
@@ -109,6 +110,9 @@ class AmadeusHotelsClient:
             "checkOutDate": check_out.isoformat(),
             "roomQuantity": 1,
         }
+        if currency_code:
+            params["currency"] = currency_code
+
         response = request_with_retry(
             "GET",
             f"{self.base_url}/v3/shopping/hotel-offers",
@@ -118,7 +122,23 @@ class AmadeusHotelsClient:
             max_retries=self._max_retries,
             backoff_base=self._backoff_base,
         )
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 400 and currency_code:
+                params.pop("currency", None)
+                response = request_with_retry(
+                    "GET",
+                    f"{self.base_url}/v3/shopping/hotel-offers",
+                    params=params,
+                    headers={"Authorization": f"Bearer {token}"},
+                    timeout=self._timeout,
+                    max_retries=self._max_retries,
+                    backoff_base=self._backoff_base,
+                )
+                response.raise_for_status()
+            else:
+                raise
         payload = response.json()
         data = payload.get("data", [])
         if not isinstance(data, list):

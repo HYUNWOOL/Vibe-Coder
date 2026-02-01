@@ -45,6 +45,7 @@ class AmadeusFlightsClient:
         date_to: date | None,
         adults: int,
         max_stops: int | None,
+        currency_code: str | None = None,
     ) -> list[dict[str, Any]]:
         token = self._auth_client.get_access_token()
         params: dict[str, Any] = {
@@ -56,6 +57,8 @@ class AmadeusFlightsClient:
         }
         if date_to:
             params["returnDate"] = date_to.isoformat()
+        if currency_code:
+            params["currencyCode"] = currency_code
 
         response = request_with_retry(
             "GET",
