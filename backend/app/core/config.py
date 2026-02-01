@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     amadeus_api_secret: str = Field("", alias="AMADEUS_API_SECRET")
     amadeus_env: str = Field("test", alias="AMADEUS_ENV")
     result_cache_ttl_seconds: int = Field(600, alias="RESULT_CACHE_TTL_SECONDS")
+    city_candidates_limit: int = Field(5, alias="CITY_CANDIDATES_LIMIT")
 
     model_config = SettingsConfigDict(
         env_file=str(ENV_FILE),
