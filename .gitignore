@@ -1,1 +1,12 @@
-backend/__pycache__/main.cpython-314.pyc
+# python
+**/.venv/
+__pycache__/
+*.pyc
+
+# node
+**/node_modules/
+**/dist/
+**/.vite/
+
+# env
+.env

@@ -1,0 +1,26 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: vibecoder-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: vibecoder
+      MYSQL_USER: vibecoder
+      MYSQL_PASSWORD: vibecoderpass
+      TZ: Asia/Seoul
+    ports:
+      - "3306:3306"
+    volumes:
+      - vibecoder_mysql:/var/lib/mysql
+    command: >
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_0900_ai_ci
+      --default-time-zone=+09:00
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-prootpass"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  vibecoder_mysql:
