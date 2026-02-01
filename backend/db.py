@@ -1,16 +1,3 @@
-import os
-from dotenv import load_dotenv
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from app.core.db import SessionLocal, engine, get_db
 
-load_dotenv()
-
-DATABASE_URL = os.environ["DATABASE_URL"]
-
-engine = create_engine(
-    DATABASE_URL,
-    pool_pre_ping=True,
-    future=True,
-)
-
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine, future=True)
+__all__ = ["SessionLocal", "engine", "get_db"]
