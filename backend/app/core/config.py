@@ -14,6 +14,12 @@ class Settings(BaseSettings):
     amadeus_api_key: str = Field("", alias="AMADEUS_API_KEY")
     amadeus_api_secret: str = Field("", alias="AMADEUS_API_SECRET")
     amadeus_env: str = Field("test", alias="AMADEUS_ENV")
+    opentripmap_api_key: str = Field("", alias="OPENTRIPMAP_API_KEY")
+    opentripmap_base_url: str = Field(
+        "https://api.opentripmap.com/0.1/en",
+        alias="OPENTRIPMAP_BASE_URL",
+    )
+    http_trust_env: bool = Field(False, alias="HTTP_TRUST_ENV")
     result_cache_ttl_seconds: int = Field(600, alias="RESULT_CACHE_TTL_SECONDS")
     city_candidates_limit: int = Field(5, alias="CITY_CANDIDATES_LIMIT")
 

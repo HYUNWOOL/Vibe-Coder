@@ -41,7 +41,14 @@ def debug_flights(
         }
         raise HTTPException(status_code=400 if 400 <= status < 500 else 502, detail=detail) from exc
     except RequestError as exc:
-        raise HTTPException(status_code=502, detail={"error": "amadeus_unreachable"}) from exc
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "error": "amadeus_unreachable",
+                "message": str(exc),
+                "exception_type": type(exc).__name__,
+            },
+        ) from exc
 
     return {"offers": offers}
 

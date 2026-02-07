@@ -74,12 +74,14 @@ class AmadeusFlightsClient:
         offers = payload.get("data", [])
         if not isinstance(offers, list):
             offers = []
+        dictionaries = payload.get("dictionaries", {}) or {}
+        carriers = dictionaries.get("carriers", {}) if isinstance(dictionaries, dict) else {}
 
         summarized: list[dict[str, Any]] = []
         for offer in offers:
             if max_stops is not None and _max_stops_for_offer(offer) > max_stops:
                 continue
-            summarized.append(summarize_offer(offer))
+            summarized.append(summarize_offer(offer, carriers=carriers))
             if len(summarized) >= 3:
                 break
         return summarized
@@ -95,7 +97,11 @@ def _max_stops_for_offer(offer: dict[str, Any]) -> int:
     return max_stops
 
 
-def summarize_offer(offer: dict[str, Any]) -> dict[str, Any]:
+def summarize_offer(
+    offer: dict[str, Any],
+    *,
+    carriers: dict[str, str] | None = None,
+) -> dict[str, Any]:
     price = offer.get("price", {}) or {}
     itineraries_summary = []
     for itinerary in offer.get("itineraries", []) or []:
@@ -103,6 +109,7 @@ def summarize_offer(offer: dict[str, Any]) -> dict[str, Any]:
         for segment in itinerary.get("segments", []) or []:
             departure = segment.get("departure", {}) or {}
             arrival = segment.get("arrival", {}) or {}
+            carrier_code = segment.get("carrierCode")
             segments_summary.append(
                 {
                     "departure": {
@@ -113,7 +120,8 @@ def summarize_offer(offer: dict[str, Any]) -> dict[str, Any]:
                         "iata_code": arrival.get("iataCode"),
                         "at": arrival.get("at"),
                     },
-                    "carrier_code": segment.get("carrierCode"),
+                    "carrier_code": carrier_code,
+                    "carrier_name": (carriers or {}).get(carrier_code),
                     "flight_number": segment.get("number"),
                     "duration": segment.get("duration"),
                 }
@@ -127,11 +135,29 @@ def summarize_offer(offer: dict[str, Any]) -> dict[str, Any]:
 
     return {
         "id": offer.get("id"),
+        "name": _build_offer_name(itineraries_summary),
         "currency": price.get("currency"),
         "price_total": price.get("grandTotal") or price.get("total"),
         "max_stops": _max_stops_for_offer(offer),
         "itineraries": itineraries_summary,
     }
+
+
+def _build_offer_name(itineraries: list[dict[str, Any]]) -> str | None:
+    if not itineraries:
+        return None
+    segments = itineraries[0].get("segments", []) or []
+    if not segments:
+        return None
+    first_segment = segments[0]
+    carrier_name = first_segment.get("carrier_name")
+    carrier_code = first_segment.get("carrier_code")
+    flight_number = first_segment.get("flight_number")
+    if carrier_name and flight_number:
+        return f"{carrier_name} {flight_number}"
+    if carrier_code and flight_number:
+        return f"{carrier_code}{flight_number}"
+    return carrier_name or carrier_code
 
 
 @lru_cache

@@ -10,6 +10,19 @@ const CONTINENTS = [
   { value: "OCEANIA", label: "Oceania" },
 ];
 
+const ITINERARY_STYLES = [
+  { value: "activity", label: "Activity" },
+  { value: "history", label: "History" },
+  { value: "photo", label: "Photo" },
+  { value: "mixed", label: "Mixed" },
+];
+
+const ITINERARY_PACES = [
+  { value: "relaxed", label: "Relaxed" },
+  { value: "normal", label: "Normal" },
+  { value: "packed", label: "Packed" },
+];
+
 const initialForm = {
   origin: "ICN",
   continent: "EUROPE",
@@ -265,6 +278,15 @@ function ResultsPage({ searchId, onNewSearch }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [data, setData] = useState(null);
+  const [itineraryForm, setItineraryForm] = useState({
+    city_code: "",
+    style: "activity",
+    pace: "normal",
+  });
+  const [itineraryLoading, setItineraryLoading] = useState(false);
+  const [itineraryError, setItineraryError] = useState("");
+  const [itineraryData, setItineraryData] = useState(null);
+  const [expandedDays, setExpandedDays] = useState({});
 
   useEffect(() => {
     let isMounted = true;
@@ -293,6 +315,81 @@ function ResultsPage({ searchId, onNewSearch }) {
     };
   }, [searchId]);
 
+  useEffect(() => {
+    if (!data?.recommendations?.length) return;
+    setItineraryForm((prev) => {
+      if (prev.city_code) return prev;
+      return { ...prev, city_code: data.recommendations[0].city_code };
+    });
+  }, [data]);
+
+  const updateItineraryForm = (field) => (event) => {
+    const value = event.target.value;
+    setItineraryForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const generateItinerary = async () => {
+    setItineraryError("");
+    setItineraryData(null);
+    setExpandedDays({});
+    if (!data?.search_input?.date_from || !data?.search_input?.date_to) {
+      setItineraryError("Search dates are required to create an itinerary.");
+      return;
+    }
+    if (!itineraryForm.city_code) {
+      setItineraryError("Choose a city first.");
+      return;
+    }
+
+    const payload = {
+      city_code: itineraryForm.city_code,
+      date_from: data.search_input.date_from,
+      date_to: data.search_input.date_to,
+      adults: Number(data.search_input.adults) || 1,
+      style: itineraryForm.style,
+      pace: itineraryForm.pace,
+    };
+
+    setItineraryLoading(true);
+    try {
+      const response = await fetch("/api/itinerary", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) {
+        const detail = await safeJson(response);
+        throw new Error(getErrorMessage(detail) || "Failed to generate itinerary.");
+      }
+      const itinerary = await response.json();
+      setItineraryData(itinerary);
+    } catch (err) {
+      setItineraryError(err?.message || "Unexpected itinerary error.");
+    } finally {
+      setItineraryLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!itineraryData?.variants?.length) return;
+    setExpandedDays((prev) => {
+      const next = { ...prev };
+      itineraryData.variants.forEach((variant, variantIndex) => {
+        const firstDay = variant.days?.[0];
+        if (!firstDay) return;
+        const key = `${variant.variant_style}-${variantIndex}-${firstDay.date}`;
+        if (next[key] === undefined) {
+          next[key] = true;
+        }
+      });
+      return next;
+    });
+  }, [itineraryData]);
+
+  const toggleDay = (key) => {
+    setExpandedDays((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
   return (
     <section className="panel">
       <div className="panel-header row">
@@ -309,46 +406,201 @@ function ResultsPage({ searchId, onNewSearch }) {
       {error && <div className="error">{error}</div>}
 
       {!loading && data && (
-        <div className="results-grid">
-          {data.recommendations?.length ? (
-            data.recommendations.map((rec) => (
-              <article key={rec.city_code} className="result-card">
-                <div className="card-header">
-                  <div>
-                    <h2>
-                      {rec.city} <span className="muted">({rec.city_code})</span>
-                    </h2>
-                    <p className="muted">{rec.country_code}</p>
-                  </div>
-                  <div className="score-pill">Score {formatScore(rec.score)}</div>
+        <>
+          {data.search_input && (
+            <div className="search-summary">
+              <div className="summary-item">
+                <span>Region</span>
+                <strong>{formatContinent(data.search_input.continent)}</strong>
+              </div>
+              <div className="summary-item">
+                <span>Budget</span>
+                <strong>
+                  {formatMoney(
+                    data.search_input.budget_total,
+                    data.search_input.currency,
+                  )}
+                </strong>
+              </div>
+              <div className="summary-item">
+                <span>Origin</span>
+                <strong>{data.search_input.origin || "-"}</strong>
+              </div>
+              <div className="summary-item">
+                <span>Dates</span>
+                <strong>
+                  {formatDateRange(
+                    data.search_input.date_from,
+                    data.search_input.date_to,
+                  )}
+                </strong>
+              </div>
+              <div className="summary-item">
+                <span>Adults</span>
+                <strong>{data.search_input.adults ?? "-"}</strong>
+              </div>
+            </div>
+          )}
+
+          {data.search_input && (
+            <section className="itinerary-panel">
+              <div className="itinerary-header">
+                <h2>Build Itinerary</h2>
+                <p>Generate day-by-day plans with alternatives per slot.</p>
+              </div>
+              <div className="itinerary-form-row">
+                <Field label="City">
+                  <select
+                    value={itineraryForm.city_code}
+                    onChange={updateItineraryForm("city_code")}
+                  >
+                    {data.recommendations?.map((rec) => (
+                      <option key={`city-${rec.city_code}`} value={rec.city_code}>
+                        {rec.city} ({rec.city_code})
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Style">
+                  <select value={itineraryForm.style} onChange={updateItineraryForm("style")}>
+                    {ITINERARY_STYLES.map((style) => (
+                      <option key={style.value} value={style.value}>
+                        {style.label}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Pace">
+                  <select value={itineraryForm.pace} onChange={updateItineraryForm("pace")}>
+                    {ITINERARY_PACES.map((pace) => (
+                      <option key={pace.value} value={pace.value}>
+                        {pace.label}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <div className="itinerary-actions">
+                  <button
+                    className="primary"
+                    type="button"
+                    disabled={itineraryLoading}
+                    onClick={generateItinerary}
+                  >
+                    {itineraryLoading ? "Generating..." : "Generate itinerary"}
+                  </button>
                 </div>
-                <div className="card-body">
-                  <div className="stat">
-                    <span>Total estimate</span>
-                    <strong>{formatMoney(rec.total_estimate, rec.flight?.currency)}</strong>
-                  </div>
-                  <div className="stat">
-                    <span>Flight min</span>
-                    <strong>{formatMoney(rec.flight?.min_total, rec.flight?.currency)}</strong>
-                  </div>
-                  <div className="stat">
-                    <span>Hotel min</span>
-                    <strong>{formatMoney(rec.hotel?.min_total, rec.hotel?.currency)}</strong>
-                  </div>
-                </div>
-                <div className="tag-row">
-                  {(rec.reasons || []).map((reason, index) => (
-                    <span key={`${rec.city_code}-${index}`} className="tag">
-                      {reason}
-                    </span>
+              </div>
+              {itineraryError && <div className="error">{itineraryError}</div>}
+
+              {itineraryData?.variants?.length ? (
+                <div className="itinerary-variants">
+                  {itineraryData.variants.map((variant) => (
+                    <article
+                      key={`${variant.variant_style}-${variant.variant_label}`}
+                      className="itinerary-variant"
+                    >
+                      <h3>{variant.variant_label}</h3>
+                      {(variant.days || []).map((day, dayIndex) => {
+                        const dayKey = `${variant.variant_style}-${dayIndex}-${day.date}`;
+                        const isExpanded = Boolean(expandedDays[dayKey]);
+                        return (
+                          <div key={`${variant.variant_style}-${day.date}`} className="itinerary-day">
+                            <button
+                              type="button"
+                              className="day-toggle"
+                              onClick={() => toggleDay(dayKey)}
+                            >
+                              <span>
+                                Day {day.day_index} ({day.date})
+                              </span>
+                              <span>{isExpanded ? "Hide" : "Show"}</span>
+                            </button>
+                            {isExpanded && (day.slots || []).map((slot) => (
+                              <div key={`${day.date}-${slot.slot}`} className="itinerary-slot">
+                                <div className="slot-title">{slot.slot}</div>
+                                <div className="slot-alternatives">
+                                  {(slot.alternatives || []).map((item, index) => (
+                                    <div
+                                      key={`${day.date}-${slot.slot}-${item.poi_id || index}`}
+                                      className="alternative-item"
+                                    >
+                                      <strong>{item.poi_name}</strong>
+                                      <span>
+                                        Visit {item.estimated_visit_minutes}m / Travel{" "}
+                                        {item.estimated_travel_minutes}m
+                                      </span>
+                                      <span className="muted">
+                                        {(item.reasons || []).join(" | ")}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })}
+                    </article>
                   ))}
                 </div>
-              </article>
-            ))
-          ) : (
-            <div className="empty">No recommendations available.</div>
+              ) : null}
+            </section>
           )}
-        </div>
+
+          <div className="results-grid">
+            {data.recommendations?.length ? (
+              data.recommendations.map((rec) => {
+                const flightOfferName = resolveOfferName(rec.flight);
+                const hotelOfferName = resolveOfferName(rec.hotel);
+
+                return (
+                  <article key={rec.city_code} className="result-card">
+                    <div className="card-header">
+                      <div>
+                        <h2>
+                          {rec.city} <span className="muted">({rec.city_code})</span>
+                        </h2>
+                        <p className="muted">{rec.country_code}</p>
+                      </div>
+                      <div className="score-pill">Score {formatScore(rec.score)}</div>
+                    </div>
+                    <div className="card-body">
+                      <div className="stat">
+                        <span>Total estimate</span>
+                        <strong>{formatMoney(rec.total_estimate, rec.flight?.currency)}</strong>
+                      </div>
+                      <div className="stat">
+                        <span>Flight min</span>
+                        <strong>{formatMoney(rec.flight?.min_total, rec.flight?.currency)}</strong>
+                      </div>
+                      <div className="stat stat-name">
+                        <span>Flight offer</span>
+                        <strong className="name-value">{flightOfferName || "-"}</strong>
+                      </div>
+                      <div className="stat">
+                        <span>Hotel min</span>
+                        <strong>{formatMoney(rec.hotel?.min_total, rec.hotel?.currency)}</strong>
+                      </div>
+                      <div className="stat stat-name">
+                        <span>Hotel</span>
+                        <strong className="name-value">{hotelOfferName || "-"}</strong>
+                      </div>
+                    </div>
+                    <div className="tag-row">
+                      {(rec.reasons || []).map((reason, index) => (
+                        <span key={`${rec.city_code}-${index}`} className="tag">
+                          {reason}
+                        </span>
+                      ))}
+                    </div>
+                  </article>
+                );
+              })
+            ) : (
+              <div className="empty">No recommendations available.</div>
+            )}
+          </div>
+        </>
       )}
     </section>
   );
@@ -376,12 +628,29 @@ async function safeJson(response) {
 
 function formatMoney(value, currency) {
   if (value === null || value === undefined || Number.isNaN(value)) {
-    return "—";
+    return "-";
   }
   if (!currency) {
     return value;
   }
   return `${value} ${currency}`;
+}
+
+function resolveOfferName(section) {
+  if (!section) return null;
+  if (section.min_offer_name) return section.min_offer_name;
+  if (!Array.isArray(section.top_offers) || !section.top_offers.length) return null;
+  return section.top_offers[0]?.name ?? null;
+}
+
+function formatContinent(continent) {
+  if (!continent) return "-";
+  return CONTINENTS.find((item) => item.value === continent)?.label || continent;
+}
+
+function formatDateRange(dateFrom, dateTo) {
+  if (!dateFrom || !dateTo) return "-";
+  return `${dateFrom} - ${dateTo}`;
 }
 
 function formatScore(value) {
@@ -401,3 +670,4 @@ function getErrorMessage(payload) {
     return "Request failed.";
   }
 }
+

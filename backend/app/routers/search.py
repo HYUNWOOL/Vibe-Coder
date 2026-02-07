@@ -27,10 +27,10 @@ def create_search(
 
     if search_request:
         cached = _get_latest_result(db, search_request.id)
-        print("DEBUG expires_at type:", type(cached.expires_at), cached.expires_at)
-        print("DEBUG now type:", type(_now()), _now())
         if cached and cached.expires_at > _now():
-            return SearchResponse(**cached.result_json)
+            return SearchResponse(
+                **_with_search_input(cached.result_json, search_request.payload_json)
+            )
     else:
         search_request = SearchRequest(
             request_hash=request_hash,
@@ -54,7 +54,14 @@ def create_search(
         }
         raise HTTPException(status_code=400 if 400 <= status < 500 else 502, detail=detail) from exc
     except RequestError as exc:
-        raise HTTPException(status_code=502, detail={"error": "amadeus_unreachable"}) from exc
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "error": "amadeus_unreachable",
+                "message": str(exc),
+                "exception_type": type(exc).__name__,
+            },
+        ) from exc
     fetched_at = _now()
     expires_at = fetched_at + timedelta(seconds=settings.result_cache_ttl_seconds)
     response_payload = {
@@ -62,6 +69,7 @@ def create_search(
         "status": "done",
         "fetched_at": fetched_at.isoformat(),
         "expires_at": expires_at.isoformat(),
+        "search_input": search_request.payload_json,
         "recommendations": recommendations,
     }
 
@@ -87,7 +95,9 @@ def get_search(search_id: int, db: Session = Depends(get_db)) -> SearchResponse:
     latest = _get_latest_result(db, search_request.id)
     if not latest:
         raise HTTPException(status_code=404, detail="search result not found")
-    return SearchResponse(**latest.result_json)
+    return SearchResponse(
+        **_with_search_input(latest.result_json, search_request.payload_json)
+    )
 
 
 def _get_latest_result(db: Session, search_request_id: int) -> SearchResult | None:
@@ -108,3 +118,9 @@ def _safe_json(response: object) -> object:
         return response.json()  # type: ignore[attr-defined]
     except Exception:
         return str(response)
+
+
+def _with_search_input(result_json: dict, search_payload: dict) -> dict:
+    payload = dict(result_json)
+    payload["search_input"] = search_payload
+    return payload

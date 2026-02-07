@@ -44,4 +44,5 @@ class SearchResponse(BaseModel):
     status: str
     fetched_at: str
     expires_at: str
+    search_input: dict[str, Any] | None = None
     recommendations: list[dict[str, Any]]

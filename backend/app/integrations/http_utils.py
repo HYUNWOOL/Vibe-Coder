@@ -5,6 +5,8 @@ from typing import Any
 
 import httpx
 
+from app.core.config import settings
+
 
 DEFAULT_TIMEOUT = httpx.Timeout(10.0, connect=10.0, read=10.0)
 
@@ -25,7 +27,7 @@ def request_with_retry(
 
     for attempt in range(max_retries + 1):
         try:
-            with httpx.Client(timeout=timeout) as client:
+            with httpx.Client(timeout=timeout, trust_env=settings.http_trust_env) as client:
                 response = client.request(
                     method,
                     url,

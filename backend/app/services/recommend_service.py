@@ -109,8 +109,12 @@ def build_recommendations(request: SearchRequestIn) -> list[dict[str, Any]]:
             fx_client=fx_client,
         )
 
-        flight_min_total, flight_currency = _min_flight_total(flight_offers)
-        hotel_min_total, hotel_currency = _min_hotel_total(hotel_offers)
+        flight_min_total, flight_currency, flight_min_offer_name = _min_flight_total(
+            flight_offers
+        )
+        hotel_min_total, hotel_currency, hotel_min_offer_name = _min_hotel_total(
+            hotel_offers
+        )
         total_estimate, total_currency = _combine_totals(
             flight_min_total,
             flight_currency,
@@ -134,11 +138,13 @@ def build_recommendations(request: SearchRequestIn) -> list[dict[str, Any]]:
                 "flight": {
                     "min_total": flight_min_total,
                     "currency": flight_currency,
+                    "min_offer_name": flight_min_offer_name,
                     "top_offers": flight_offers,
                 },
                 "hotel": {
                     "min_total": hotel_min_total,
                     "currency": hotel_currency,
+                    "min_offer_name": hotel_min_offer_name,
                     "top_offers": [asdict(offer) for offer in hotel_offers],
                 },
                 "total_estimate": total_estimate,
@@ -226,9 +232,10 @@ def _pref_hotel_stars(request: SearchRequestIn) -> int | None:
 
 def _min_flight_total(
     offers: list[dict[str, Any]],
-) -> tuple[float | None, str | None]:
+) -> tuple[float | None, str | None, str | None]:
     min_total: float | None = None
     currency: str | None = None
+    offer_name: str | None = None
     for offer in offers:
         value = offer.get("price_total")
         parsed = _parse_money(value)
@@ -237,21 +244,24 @@ def _min_flight_total(
         if min_total is None or parsed < min_total:
             min_total = parsed
             currency = offer.get("currency")
-    return min_total, currency
+            offer_name = offer.get("name")
+    return min_total, currency, offer_name
 
 
 def _min_hotel_total(
     offers: list[HotelOfferSummary],
-) -> tuple[float | None, str | None]:
+) -> tuple[float | None, str | None, str | None]:
     min_total: float | None = None
     currency: str | None = None
+    offer_name: str | None = None
     for offer in offers:
         if offer.price_total is None:
             continue
         if min_total is None or offer.price_total < min_total:
             min_total = offer.price_total
             currency = offer.currency
-    return min_total, currency
+            offer_name = offer.name
+    return min_total, currency, offer_name
 
 
 def _combine_totals(
